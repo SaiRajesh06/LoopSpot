@@ -1,15 +1,19 @@
 // app/home.jsx
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Platform } from 'react-native';
+import {
+  StyleSheet,
+  View,
+  Text,
+  TouchableOpacity,
+  Platform,
+} from 'react-native';
 import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
-import { useRouter } from 'expo-router';
+import CreateLoopModal from './CreateLoopModal';
 
 const Home = () => {
-  const router = useRouter();
-
   // Replace with API value later
-  const [username, setUsername] = useState('User');
+  const [username] = useState('User');
 
   const [region, setRegion] = useState({
     latitude: 37.78825,
@@ -17,6 +21,8 @@ const Home = () => {
     latitudeDelta: 0.02,
     longitudeDelta: 0.02,
   });
+
+  const [showCreateLoop, setShowCreateLoop] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -35,7 +41,8 @@ const Home = () => {
     })();
   }, []);
 
-  const onCreateLoop = () => router.push('/loop');
+  const openCreateLoop = () => setShowCreateLoop(true);
+  const closeCreateLoop = () => setShowCreateLoop(false);
 
   return (
     <View style={styles.container}>
@@ -55,9 +62,14 @@ const Home = () => {
 
       <View style={styles.avatar} />
 
-      <TouchableOpacity style={styles.pill} activeOpacity={0.8} onPress={onCreateLoop}>
+      <TouchableOpacity style={styles.pill} activeOpacity={0.8} onPress={openCreateLoop}>
         <Text style={styles.pillText}>Wanna create loop?</Text>
       </TouchableOpacity>
+
+      <CreateLoopModal 
+        visible={showCreateLoop} 
+        onClose={closeCreateLoop} 
+      />
     </View>
   );
 };
