@@ -1,4 +1,3 @@
-// app/CreateLoopModal.jsx
 import React, { useState } from 'react';
 import {
   StyleSheet,
@@ -10,8 +9,14 @@ import {
   TextInput,
   Pressable,
   KeyboardAvoidingView,
+  Alert,
+  SafeAreaView,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as Clipboard from 'expo-clipboard';
+import { Share } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getShareLink, generateLoopId } from './utils/linkUtils';
 
 const isIOS = Platform.OS === 'ios';
 
@@ -22,9 +27,7 @@ const CreateLoopModal = ({ visible, onClose }) => {
   const [loopName, setLoopName] = useState('');
   const [approxStay, setApproxStay] = useState('');
   const [startDateTime, setStartDateTime] = useState(new Date());
-  const [endDateTime, setEndDateTime] = useState(
-    new Date(Date.now() + 60 * 60 * 1000)
-  );
+  const [endDateTime, setEndDateTime] = useState(new Date(Date.now() + 60 * 60 * 1000));
 
   // Android pickers
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
@@ -32,72 +35,95 @@ const CreateLoopModal = ({ visible, onClose }) => {
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
 
+  // share step state
   const [loopDataToShare, setLoopDataToShare] = useState(null);
+  const [shareLink, setShareLink] = useState('');
+  const [loopId, setLoopId] = useState('');
 
   const fmtDate = (d) =>
     d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
   const fmtTime = (d) =>
     d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
+  // --- Date/Time change handlers ---
   const onChangeStartDate = (_, selectedDate) => {
     if (!selectedDate) return setShowStartDatePicker(false);
     const next = new Date(startDateTime);
-    next.setFullYear(selectedDate.getFullYear());
-    next.setMonth(selectedDate.getMonth());
-    next.setDate(selectedDate.getDate());
+    next.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
     setStartDateTime(next);
     if (!isIOS) setShowStartDatePicker(false);
   };
-
   const onChangeStartTime = (_, selectedTime) => {
     if (!selectedTime) return setShowStartTimePicker(false);
     const next = new Date(startDateTime);
-    next.setHours(selectedTime.getHours());
-    next.setMinutes(selectedTime.getMinutes());
-    next.setSeconds(0, 0);
+    next.setHours(selectedTime.getHours(), selectedTime.getMinutes(), 0, 0);
     setStartDateTime(next);
     if (!isIOS) setShowStartTimePicker(false);
   };
-
   const onChangeEndDate = (_, selectedDate) => {
     if (!selectedDate) return setShowEndDatePicker(false);
     const next = new Date(endDateTime);
-    next.setFullYear(selectedDate.getFullYear());
-    next.setMonth(selectedDate.getMonth());
-    next.setDate(selectedDate.getDate());
+    next.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
     setEndDateTime(next);
     if (!isIOS) setShowEndDatePicker(false);
   };
-
   const onChangeEndTime = (_, selectedTime) => {
     if (!selectedTime) return setShowEndTimePicker(false);
     const next = new Date(endDateTime);
-    next.setHours(selectedTime.getHours());
-    next.setMinutes(selectedTime.getMinutes());
-    next.setSeconds(0, 0);
+    next.setHours(selectedTime.getHours(), selectedTime.getMinutes(), 0, 0);
     setEndDateTime(next);
     if (!isIOS) setShowEndTimePicker(false);
   };
 
-  const goToShare = () => {
+  // --- helpers ---
+  const encodePayload = (obj) => encodeURIComponent(JSON.stringify(obj));
+  const validateTimes = () => {
+    if (endDateTime < startDateTime) {
+      Alert.alert('Invalid time range', 'End must be after Start.');
+      return false;
+    }
+    return true;
+  };
+  const buildLoopData = (id) => ({
+    id,
+    loopName: loopName.trim(),
+    approxStay: approxStay.trim(),
+    startDate: fmtDate(startDateTime),
+    startTime: fmtTime(startDateTime),
+    endDate: fmtDate(endDateTime),
+    endTime: fmtTime(endDateTime),
+    startDateTime: new Date(startDateTime).toISOString(),
+    endDateTime: new Date(endDateTime).toISOString(),
+    createdAt: new Date().toISOString(),
+  });
+
+  // --- flow actions ---
+  const goToShare = async () => {
     if (!loopName.trim()) {
-      alert('Please enter a loop name');
+      Alert.alert('Missing name', 'Please enter a loop name');
       return;
     }
-    setLoopDataToShare({
-      loopName: loopName.trim(),
-      approxStay: approxStay.trim(),
-      startDate: fmtDate(startDateTime),
-      startTime: fmtTime(startDateTime),
-      endDate: fmtDate(endDateTime),
-      endTime: fmtTime(endDateTime),
-    });
+    if (!validateTimes()) return;
+
+    const id = generateLoopId();
+    const data = buildLoopData(id);
+
+    try {
+      await AsyncStorage.setItem(String(id), JSON.stringify(data));
+    } catch (e) {
+      console.warn('Failed to store locally:', e);
+    }
+
+    const base = getShareLink(id);
+    const url = `${base}?d=${encodePayload(data)}`;
+
+    setLoopId(id);
+    setLoopDataToShare(data);
+    setShareLink(url);
     setStep('share');
   };
 
-  const backToEdit = () => {
-    setStep('create');
-  };
+  const backToEdit = () => setStep('create');
 
   const closeAll = () => {
     resetForm();
@@ -111,10 +137,28 @@ const CreateLoopModal = ({ visible, onClose }) => {
     setStartDateTime(new Date());
     setEndDateTime(new Date(Date.now() + 60 * 60 * 1000));
     setLoopDataToShare(null);
+    setShareLink('');
+    setLoopId('');
     setShowStartDatePicker(false);
     setShowStartTimePicker(false);
     setShowEndDatePicker(false);
     setShowEndTimePicker(false);
+  };
+
+  const handleCopy = async () => {
+    if (!shareLink) return Alert.alert('No link yet', 'Create the link first.');
+    await Clipboard.setStringAsync(shareLink);
+    Alert.alert('Copied!', 'Link copied to clipboard.');
+  };
+
+  const handleShare = async () => {
+    if (!shareLink) return Alert.alert('No link yet', 'Create the link first.');
+    const message = `Join my loop "${loopDataToShare?.loopName || 'My Loop'}"
+Start: ${loopDataToShare?.startDate} ${loopDataToShare?.startTime}
+End:   ${loopDataToShare?.endDate} ${loopDataToShare?.endTime}
+
+Open: ${shareLink}`;
+    await Share.share({ title: 'Join my loop', message, url: shareLink });
   };
 
   return (
@@ -124,10 +168,17 @@ const CreateLoopModal = ({ visible, onClose }) => {
       animationType="fade"
       onRequestClose={closeAll}
     >
-      <Pressable style={styles.backdrop} onPress={closeAll}>
-        <Pressable>
+      <Pressable
+        style={styles.backdrop}
+        onPressOut={(e) => {
+          // Only close if clicking outside the modal card
+          if (e.target === e.currentTarget) closeAll();
+        }}
+      >
+        <SafeAreaView style={styles.modalCenter}>
           <KeyboardAvoidingView
-            behavior={isIOS ? 'padding' : undefined}
+            behavior={isIOS ? 'padding' : 'height'}
+            keyboardVerticalOffset={isIOS ? 0 : 20}
             style={styles.modalCenter}
           >
             {/* CREATE STEP */}
@@ -282,11 +333,11 @@ const CreateLoopModal = ({ visible, onClose }) => {
             )}
 
             {/* SHARE STEP */}
-            {step === 'share' && (
+            {step === 'share' && loopDataToShare && (
               <View style={styles.modalCard}>
                 <Text style={styles.modalTitle}>Share Loop</Text>
 
-                {/* Loop details only */}
+                {/* Loop details */}
                 <View style={styles.detailsContainer}>
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Loop Name:</Text>
@@ -304,32 +355,34 @@ const CreateLoopModal = ({ visible, onClose }) => {
                       {loopDataToShare.endDate} at {loopDataToShare.endTime}
                     </Text>
                   </View>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Duration:</Text>
-                    <Text style={styles.detailValue}>{loopDataToShare.approxStay}</Text>
-                  </View>
+                  {!!loopDataToShare.approxStay && (
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Duration:</Text>
+                      <Text style={styles.detailValue}>{loopDataToShare.approxStay}</Text>
+                    </View>
+                  )}
                 </View>
 
+                {/* Share link */}
+                {!!shareLink && (
+                  <View style={{ marginBottom: 8 }}>
+                    <Text numberOfLines={2} selectable style={{ fontSize: 12, color: '#007AFF' }}>
+                      {shareLink}
+                    </Text>
+                  </View>
+                )}
+
                 <View style={styles.buttonContainer}>
-                 
                   <TouchableOpacity
                     style={[styles.actionBtn, styles.shareBtn]}
-                    onPress={() => {
-                      // TODO: Add your share functionality here
-                      console.log('Sharing loop:', loopDataToShare);
-                      closeAll();
-                    }}
+                    onPress={handleShare}
                   >
                     <Text style={styles.shareBtnText}>Share this loop</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
                     style={[styles.actionBtn, styles.copyBtn]}
-                    onPress={() => {
-                      // TODO: Add your copy link functionality here
-                      console.log('Copying link for loop:', loopDataToShare);
-                      closeAll();
-                    }}
+                    onPress={handleCopy}
                   >
                     <Text style={styles.copyBtnText}>Copy link</Text>
                   </TouchableOpacity>
@@ -343,10 +396,8 @@ const CreateLoopModal = ({ visible, onClose }) => {
                 </View>
               </View>
             )}
-
-
           </KeyboardAvoidingView>
-        </Pressable>
+        </SafeAreaView>
       </Pressable>
     </Modal>
   );
@@ -362,7 +413,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 24,
   },
-  modalCenter: { width: '100%' },
+  modalCenter: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   modalCard: {
     width: 300,
     backgroundColor: '#fff',
@@ -374,45 +430,123 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 6,
   },
-  modalTitle: { alignSelf: 'center', fontSize: 16, marginBottom: 10, color: '#333' },
+  modalTitle: {
+    alignSelf: 'center',
+    fontSize: 16,
+    marginBottom: 10,
+    color: '#333',
+    fontWeight: '600',
+  },
   input: {
     height: 40,
     borderRadius: 6,
     backgroundColor: '#f2f3f5',
     paddingHorizontal: 12,
     marginTop: 10,
+    fontSize: 14,
   },
-  label: { marginTop: 12, fontSize: 13, color: '#555' },
-  inlineRow: { marginTop: 6, flexDirection: 'row', alignItems: 'center', gap: 6 },
-  inlineValue: { fontSize: 14, color: '#111' },
-  dot: { opacity: 0.4 },
-  picker: { marginTop: 6, alignSelf: 'stretch' },
-  rowButtons: { flexDirection: 'row', gap: 10, marginTop: 8 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', gap: 10, marginTop: 16 },
-  btn: { flex: 1, height: 38, borderRadius: 6, justifyContent: 'center', alignItems: 'center' },
-  btnGhost: { backgroundColor: '#eee' },
-  btnPrimary: { backgroundColor: '#111' },
-  btnPrimaryText: { color: '#fff' },
+  label: {
+    marginTop: 12,
+    fontSize: 13,
+    color: '#555',
+    fontWeight: '500',
+  },
+  inlineRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  inlineValue: {
+    fontSize: 14,
+    color: '#111',
+  },
+  dot: {
+    opacity: 0.4,
+  },
+  picker: {
+    marginTop: 6,
+    alignSelf: 'stretch',
+  },
+  rowButtons: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginTop: 16,
+  },
+  btn: {
+    flex: 1,
+    height: 38,
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  btnGhost: {
+    backgroundColor: '#eee',
+  },
+  btnPrimary: {
+    backgroundColor: '#111',
+  },
+  btnPrimaryText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
   detailsContainer: {
     backgroundColor: '#f8f9fa',
     borderRadius: 8,
     padding: 16,
     marginBottom: 16,
   },
-  detailRow: { marginBottom: 8 },
-  detailLabel: { fontSize: 12, color: '#666', fontWeight: '500', marginBottom: 2 },
-  detailValue: { fontSize: 14, color: '#333' },
-  buttonContainer: { gap: 10 },
+  detailRow: {
+    marginBottom: 8,
+  },
+  detailLabel: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  detailValue: {
+    fontSize: 14,
+    color: '#333',
+  },
+  buttonContainer: {
+    gap: 10,
+  },
   actionBtn: {
     height: 44,
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 16,
-    backgroundColor: '#f8f9fa',
   },
-  backBtn: { backgroundColor: '#eee' },
-  backBtnText: { color: '#111', fontSize: 16, fontWeight: '500' },
-  doneBtn: { backgroundColor: '#111' },
-  doneBtnText: { color: '#fff', fontSize: 16, fontWeight: '500' },
+  backBtn: {
+    backgroundColor: '#eee',
+  },
+  backBtnText: {
+    color: '#111',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  shareBtn: {
+    backgroundColor: '#111',
+  },
+  shareBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  copyBtn: {
+    backgroundColor: '#e9ecef',
+  },
+  copyBtnText: {
+    color: '#111',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });

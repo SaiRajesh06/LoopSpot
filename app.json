@@ -1,6 +1,6 @@
 {
   "expo": {
-    "scheme": "LoopSpot",
+    "scheme": "loopspot",
     "name": "LoopSpot",
     "slug": "LoopSpot",
     "version": "1.0.0",
@@ -15,8 +15,15 @@
     },
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.yourcompany.loopspot",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "We use your location to show your live position on the map."
+        "NSLocationWhenInUseUsageDescription": "We use your location to show your live position on the map.",
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLName": "loopspot",
+            "CFBundleURLSchemes": ["loopspot"]
+          }
+        ]
       }
     },
     "android": {
@@ -24,17 +31,31 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+      "package": "com.yourcompany.loopspot",
       "edgeToEdgeEnabled": true,
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": {
+            "scheme": "loopspot"
+          },
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
     },
     "plugins": [
       "expo-router"
-    ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
   }
 }
