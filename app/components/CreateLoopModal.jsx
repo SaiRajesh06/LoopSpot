@@ -16,7 +16,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Clipboard from 'expo-clipboard';
 import { Share } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getShareLink, generateLoopId } from './utils/linkUtils';
+import { getShareLink, generateLoopId } from '../utils/linkUtils';
 
 const isIOS = Platform.OS === 'ios';
 

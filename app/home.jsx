@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
-import CreateLoopModal from './CreateLoopModal';
+import CreateLoopModal from './components/CreateLoopModal';
 
 const Home = () => {
   // Replace with API value later

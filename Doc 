@@ -1,0 +1,115 @@
+# LoopSpot — Deep Links, Guest Flow & Modals
+
+## Background
+Originally, the app had a **single Home screen (`app/home.jsx`)** that both creators and guests used.  
+
+- **Creators (loop owners)** needed to:
+  - Create loops
+  - Share links with friends
+- **Guests (end users)** needed to:
+  - Accept an invite
+  - See loop details
+  - Possibly add a location
+
+### Problem
+The **same home screen** was trying to serve both roles. Guests ended up seeing creator features (like “Create Loop”) that weren’t relevant to them. This created confusion.
+
+---
+
+## Goal
+1. **Split the UX for creators and guests** so each sees only what they need.
+2. **Enable deep links without a backend**, so guests can open an invite link and immediately see loop details.
+3. **Introduce reusable modals** for creating and viewing loops.
+4. Keep codebase **organized and scalable**.
+
+---
+
+## Final Flow
+
+### Creator
+- Starts in `/home.jsx`.
+- Uses `CreateLoopModal` to create a loop.
+- Loop is saved locally in `AsyncStorage`. 
+- A deep link is generated: exp://<dev-server>/--/loop/<loopId>?d=<urlencoded JSON>
+
+- Creator shares the link.
+
+### Guest
+- Opens the deep link on their device.
+- Lands on `/loop/[loopId].jsx` (Accept/Reject screen).
+- Loop data is resolved from:
+  - `AsyncStorage.getItem(loopId)`, or
+  - the payload in the `?d=` query.
+- On **Accept**, guest is redirected to `/guest-home.jsx`:
+```js
+router.replace({
+  pathname: '/guest-home',
+  params: { loopId: String(loopId), d: d ? String(d) : '' },
+});
+
+
+app/
+  home.jsx                  # creator home (map + create loop modal)
+  guest-home.jsx            # guest home (map + auto-open details modal)
+  loop/
+    [loopId].jsx            # accept/reject invite screen
+    utils/
+      linkUtils.js          # getShareLink(), generateLoopId()
+  components/
+    CreateLoopModal.jsx     # modal for creating/sharing loops
+    LoopDetailsModal.jsx    # modal for viewing loop details
+
+
+Why this structure?
+Files in app/ = routes/screens (navigable).
+Files in app/components/ = reusable UI (not routes).
+Initially, CreateLoopModal was mistakenly placed in app/.
+This caused import errors because app/ is meant for screens.
+Fix: moved it to app/components/ and updated imports.
+
+Key Concepts
+Expo Router
+File-based navigation:
+app/home.jsx → /home
+app/guest-home.jsx → /guest-home
+app/loop/[loopId].jsx → /loop/:loopId
+Works seamlessly with Expo deep links (exp://…/--/path).
+Deep Linking
+We use Linking.createURL('/loop/<id>') to generate links.
+Add ?d=<urlencoded JSON> to embed loop details, since no backend exists.
+Guests decode this payload on their device.
+
+AsyncStorage
+Local key–value storage (like localStorage for React Native).
+
+Used to:
+Save created loops under loopId.
+Retrieve loop data when a guest accepts.
+
+Potential future use:
+Store userRole (creator / guest) for auto-routing.
+
+Step-by-Step Implementation
+1. Accept/Reject Screen (app/loop/[loopId].jsx)
+Created to handle invite links.
+Loads loop data from AsyncStorage or the ?d= payload.
+Shows loop info and Accept/Reject buttons.
+On Accept → redirects to /guest-home.
+
+2. Guest Home (app/guest-home.jsx)
+New screen just for guests.
+Shows a map.
+On mount:
+Resolves loop data (AsyncStorage → payload).
+Automatically opens LoopDetailsModal.
+
+3. LoopDetailsModal (app/components/LoopDetailsModal.jsx)
+Reusable modal to show loop details.
+Includes placeholder buttons for Edit and Add Location.
+Can be reused later for both creators and guests.
+
+4. CreateLoopModal (app/components/CreateLoopModal.jsx)
+Modal to create loops and generate deep links.
+Initially inside app/ (incorrect).
+Moved to app/components/ for consistency.
+home.jsx imports it with:

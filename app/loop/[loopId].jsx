@@ -44,13 +44,10 @@ export default function AcceptLoopScreen() {
   }, [loopId, d]);
 
   const handleAcceptLoop = async () => {
-    try {
-      Alert.alert('Success!', 'You have joined the loop successfully!', [
-        { text: 'OK', onPress: () => router.replace('/') },
-      ]);
-    } catch {
-      Alert.alert('Error', 'Failed to join the loop');
-    }
+    router.replace({
+      pathname: '/guest-home',
+      params: { loopId: String(loopId), d: d ? String(d) : '' },
+    });
   };
 
   const handleReject = () =>
