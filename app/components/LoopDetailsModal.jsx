@@ -1,24 +1,35 @@
 // app/components/LoopDetailsModal.jsx
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 
-export default function LoopDetailsModal({ visible, onClose, loop }) {
+export default function LoopDetailsModal({ visible, onClose, loop, onAddLocation }) {
   const [locationNumber, setLocationNumber] = useState('');
 
+  // Clear the field whenever the modal opens
+  useEffect(() => {
+    if (visible) setLocationNumber('');
+  }, [visible]);
+
   const onEdit = () => {
-    // TODO: open your “edit loop” flow/screen
-    // you have `loop` here (name, dates, etc.)
     onClose?.();
   };
 
-  const onAddLocation = () => {
-    // TODO: push a location-adding screen / or handle inline
-    // Example: console.log({ loopId: loop?.id, locationNumber })
+  const handleAddLocation = () => {
+    // send the number back to guest-home so it can enter add-mode
+    onAddLocation?.(locationNumber);
     onClose?.();
   };
+
+  const addDisabled = locationNumber.trim().length === 0;
 
   return (
-    <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose}>
+    <Modal
+      transparent
+      animationType="fade"
+      visible={visible}
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <Text style={styles.title}>Loop Details</Text>
@@ -36,7 +47,11 @@ export default function LoopDetailsModal({ visible, onClose, loop }) {
               <Text>Edit</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={[styles.btn, styles.btnPrimary]} onPress={onAddLocation}>
+            <TouchableOpacity
+              style={[styles.btn, styles.btnPrimary, addDisabled && { opacity: 0.5 }]}
+              onPress={handleAddLocation}
+              disabled={addDisabled}
+            >
               <Text style={{ color: '#fff' }}>Add Location</Text>
             </TouchableOpacity>
           </View>

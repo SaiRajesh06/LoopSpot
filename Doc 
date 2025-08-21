@@ -21,6 +21,7 @@ The **same home screen** was trying to serve both roles. Guests ended up seeing 
 2. **Enable deep links without a backend**, so guests can open an invite link and immediately see loop details.
 3. **Introduce reusable modals** for creating and viewing loops.
 4. Keep codebase **organized and scalable**.
+5. Extend the **guest experience** to allow multi-pin workflows (with names & times), editing, and clearing locations.
 
 ---
 
@@ -30,8 +31,8 @@ The **same home screen** was trying to serve both roles. Guests ended up seeing 
 - Starts in `/home.jsx`.
 - Uses `CreateLoopModal` to create a loop.
 - Loop is saved locally in `AsyncStorage`. 
-- A deep link is generated: exp://<dev-server>/--/loop/<loopId>?d=<urlencoded JSON>
-
+- A deep link is generated:  
+  `exp://<dev-server>/--/loop/<loopId>?d=<urlencoded JSON>`
 - Creator shares the link.
 
 ### Guest
@@ -41,16 +42,16 @@ The **same home screen** was trying to serve both roles. Guests ended up seeing 
   - `AsyncStorage.getItem(loopId)`, or
   - the payload in the `?d=` query.
 - On **Accept**, guest is redirected to `/guest-home.jsx`:
-```js
-router.replace({
-  pathname: '/guest-home',
-  params: { loopId: String(loopId), d: d ? String(d) : '' },
-});
+  ```js
+  router.replace({
+    pathname: '/guest-home',
+    params: { loopId: String(loopId), d: d ? String(d) : '' },
+  });
 
 
 app/
   home.jsx                  # creator home (map + create loop modal)
-  guest-home.jsx            # guest home (map + auto-open details modal)
+  guest-home.jsx            # guest home (map + auto-open details modal + pins flow)
   loop/
     [loopId].jsx            # accept/reject invite screen
     utils/
@@ -59,57 +60,128 @@ app/
     CreateLoopModal.jsx     # modal for creating/sharing loops
     LoopDetailsModal.jsx    # modal for viewing loop details
 
+### 🧠 Why This Structure?
 
-Why this structure?
-Files in app/ = routes/screens (navigable).
-Files in app/components/ = reusable UI (not routes).
-Initially, CreateLoopModal was mistakenly placed in app/.
-This caused import errors because app/ is meant for screens.
-Fix: moved it to app/components/ and updated imports.
+- `app/` contains **navigable screens** (routes).
+- `app/components/` contains **reusable UI components**, not routes.
+- Initially, `CreateLoopModal` was incorrectly placed in `app/`, causing import issues. ✅ Fixed by moving it to `app/components/`.
 
-Key Concepts
-Expo Router
+---
+
+## 🔑 Key Concepts
+
+### 🚏 Expo Router
+
 File-based navigation:
-app/home.jsx → /home
-app/guest-home.jsx → /guest-home
-app/loop/[loopId].jsx → /loop/:loopId
-Works seamlessly with Expo deep links (exp://…/--/path).
-Deep Linking
-We use Linking.createURL('/loop/<id>') to generate links.
-Add ?d=<urlencoded JSON> to embed loop details, since no backend exists.
-Guests decode this payload on their device.
 
-AsyncStorage
-Local key–value storage (like localStorage for React Native).
+| File Path                  | Route         |
+|---------------------------|---------------|
+| `app/home.jsx`            | `/home`       |
+| `app/guest-home.jsx`      | `/guest-home` |
+| `app/loop/[loopId].jsx`   | `/loop/:loopId` |
+
+Works seamlessly with Expo deep links:  
+`exp://…/--/path`
+
+---
+
+### 🔗 Deep Linking
+
+- Use `Linking.createURL('/loop/<id>')` to generate links.
+- Append `?d=<urlencoded JSON>` to embed loop details (no backend required).
+- Guests decode this payload locally.
+
+---
+
+### 💾 AsyncStorage
+
+Local key–value storage (similar to `localStorage` in React Native).
 
 Used to:
-Save created loops under loopId.
-Retrieve loop data when a guest accepts.
+- Save created loops under `loopId`.
+- Retrieve loop data when a guest accepts.
 
 Potential future use:
-Store userRole (creator / guest) for auto-routing.
+- Store `userRole` (creator / guest) for auto-routing.
 
-Step-by-Step Implementation
-1. Accept/Reject Screen (app/loop/[loopId].jsx)
-Created to handle invite links.
-Loads loop data from AsyncStorage or the ?d= payload.
-Shows loop info and Accept/Reject buttons.
-On Accept → redirects to /guest-home.
+---
 
-2. Guest Home (app/guest-home.jsx)
-New screen just for guests.
-Shows a map.
-On mount:
-Resolves loop data (AsyncStorage → payload).
-Automatically opens LoopDetailsModal.
+## 🛠 Step-by-Step Implementation
 
-3. LoopDetailsModal (app/components/LoopDetailsModal.jsx)
-Reusable modal to show loop details.
-Includes placeholder buttons for Edit and Add Location.
-Can be reused later for both creators and guests.
+### 1. Accept/Reject Screen (`app/loop/[loopId].jsx`)
 
-4. CreateLoopModal (app/components/CreateLoopModal.jsx)
-Modal to create loops and generate deep links.
-Initially inside app/ (incorrect).
-Moved to app/components/ for consistency.
-home.jsx imports it with:
+- Handles invite links.
+- Loads loop data from AsyncStorage or `?d` payload.
+- Displays loop info and Accept / Reject buttons.
+- On Accept → redirects to `/guest-home`.
+
+---
+
+### 2. Guest Home (`app/guest-home.jsx`)
+
+Guest landing screen after accepting an invite.
+
+#### 🗺 Map Features:
+- Current location
+- Saved pins
+
+#### 🔄 On Mount:
+- Resolves loop data (AsyncStorage → payload).
+- Auto-opens `LoopDetailsModal`.
+
+#### ➕ Multi-Pin Add Flow:
+1. Guest enters number of pins in `LoopDetailsModal` (e.g., 2).
+2. Enters add-mode:
+   - Remaining count displayed.
+   - Guest long-presses map to drop a pending pin.
+   - A card pops up to enter Name and Time to stay.
+3. On Add:
+   - Pin is persisted.
+   - Count decrements.
+4. When all pins are placed:
+   - Add-mode ends silently.
+   - Pins remain visible on map.
+
+#### ✏️ Editing Pins:
+- Tap an existing pin → opens Edit card.
+- Update Name and Time → Save.
+- Changes persisted to AsyncStorage.
+
+#### 🧹 Clearing Pins:
+- Floating red “Remove all pins” button clears all pins from the loop.
+
+---
+
+### 3. LoopDetailsModal (`app/components/LoopDetailsModal.jsx`)
+
+Reusable modal for loop details.
+
+- Input for Add Location Number.
+- “Add Location” button passes count back to `guest-home` to trigger add-mode.
+- Can be extended for both creators & guests.
+
+---
+
+### 4. CreateLoopModal (`app/components/CreateLoopModal.jsx`)
+
+Modal for creators to:
+- Create a new loop
+- Generate deep links
+
+✅ Correctly located under `app/components/`.
+
+---
+
+## 🎬 Demo Flow (Guest)
+
+1. Guest opens invite link.
+2. Accepts invite → lands on `/guest-home`.
+3. `LoopDetailsModal` opens:
+   - Enters `2` → taps “Add Location”.
+4. On map:
+   - Long-press → enters *Hall*, 30 min → taps Add.
+   - Long-press again → enters *Cafe*, 45 min → taps Add.
+5. Done! Two pins appear on map with details.
+6. Later:
+   - Taps a pin → edits name/time.
+   - Or clears all pins via the “Remove all pins” button.
