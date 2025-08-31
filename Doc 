@@ -1,4 +1,4 @@
-# LoopSpot — Deep Links, Guest Flow & Modals
+# LoopSpot — Deep Links, Guest Flow, Modals & Auth
 
 ## Background
 Originally, the app had a **single Home screen (`app/home.jsx`)** that both creators and guests used.  
@@ -22,13 +22,17 @@ The **same home screen** was trying to serve both roles. Guests ended up seeing 
 3. **Introduce reusable modals** for creating and viewing loops.
 4. Keep codebase **organized and scalable**.
 5. Extend the **guest experience** to allow multi-pin workflows (with names & times), editing, and clearing locations.
+6. **Add authentication** (Firebase email/password) with login & signup.
+7. Show the user’s **display name** (or email prefix) in the Home greeting.
 
 ---
 
 ## Final Flow
 
 ### Creator
+- Signs in via **login/signup screen** (`app/index.jsx`).
 - Starts in `/home.jsx`.
+- Sees greeting: `Hi {displayName},`.
 - Uses `CreateLoopModal` to create a loop.
 - Loop is saved locally in `AsyncStorage`. 
 - A deep link is generated:  
@@ -50,15 +54,18 @@ The **same home screen** was trying to serve both roles. Guests ended up seeing 
 
 
 app/
-  home.jsx                  # creator home (map + create loop modal)
-  guest-home.jsx            # guest home (map + auto-open details modal + pins flow)
+  index.jsx                # login/signup screen (Firebase)
+  home.jsx                 # creator home (map + greeting + create loop modal)
+  guest-home.jsx           # guest home (map + auto-open details modal + pins flow)
   loop/
-    [loopId].jsx            # accept/reject invite screen
+    [loopId].jsx           # accept/reject invite screen
     utils/
-      linkUtils.js          # getShareLink(), generateLoopId()
+      linkUtils.js         # getShareLink(), generateLoopId()
   components/
-    CreateLoopModal.jsx     # modal for creating/sharing loops
-    LoopDetailsModal.jsx    # modal for viewing loop details
+    CreateLoopModal.jsx    # modal for creating/sharing loops
+    LoopDetailsModal.jsx   # modal for viewing loop details
+  services/
+    authService.js         # Firebase authentication service
 
 ### 🧠 Why This Structure?
 
@@ -74,11 +81,11 @@ app/
 
 File-based navigation:
 
-| File Path                  | Route         |
-|---------------------------|---------------|
-| `app/home.jsx`            | `/home`       |
-| `app/guest-home.jsx`      | `/guest-home` |
-| `app/loop/[loopId].jsx`   | `/loop/:loopId` |
+| File Path               | Route           |
+| ----------------------- | --------------- |
+| `app/home.jsx`          | `/home`         |
+| `app/guest-home.jsx`    | `/guest-home`   |
+| `app/loop/[loopId].jsx` | `/loop/:loopId` |
 
 Works seamlessly with Expo deep links:  
 `exp://…/--/path`
@@ -105,6 +112,21 @@ Potential future use:
 - Store `userRole` (creator / guest) for auto-routing.
 
 ---
+
+### Firebase Authentication
+- Implemented in app/services/authService.js.
+Provides:
+- signUp(name, email, password)
+- signIn(email, password)
+- signOut()
+- getCurrentUser()
+- onAuthStateChanged(cb)
+app/index.jsx is the login/signup UI:
+- Toggle between Sign In and Sign Up.
+- On signup, Firebase auto-creates the user and saves displayName.
+app/home.jsx:
+- Subscribes to auth state.
+- Shows Hi {displayName} card.
 
 ## 🛠 Step-by-Step Implementation
 
@@ -171,6 +193,11 @@ Modal for creators to:
 ✅ Correctly located under `app/components/`.
 
 ---
+### 5. Home Greeting (with Auth)
+
+home.jsx now greets the logged-in user:
+- Hi {displayName},
+- Fallbacks: displayName → else email prefix → else "User".
 
 ## 🎬 Demo Flow (Guest)
 
@@ -185,3 +212,13 @@ Modal for creators to:
 6. Later:
    - Taps a pin → edits name/time.
    - Or clears all pins via the “Remove all pins” button.
+
+### 🎬 Demo Flow (Auth + Creator)
+- User launches app → sees login/signup screen.
+- Taps “Don’t have an account? Sign Up”:
+- Enters full name, email, password → Firebase creates account.
+- Lands on /home:
+- Greeting card: Hi John,
+- Can create loop via modal.
+
+- 31-08-2025: Added Firebase Authentication (authService.js, index.jsx login/signup), updated home.jsx greeting with displayName.

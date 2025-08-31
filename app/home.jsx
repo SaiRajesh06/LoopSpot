@@ -11,9 +11,12 @@ import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import CreateLoopModal from './components/CreateLoopModal';
 
+// ⬇️ import your auth service
+import { authService } from './services/authService'; // <-- update path if needed
+
 const Home = () => {
-  // Replace with API value later
-  const [username] = useState('User');
+  // Will be populated from Firebase auth
+  const [username, setUsername] = useState('User');
 
   const [region, setRegion] = useState({
     latitude: 37.78825,
@@ -25,6 +28,7 @@ const Home = () => {
   const [showCreateLoop, setShowCreateLoop] = useState(false);
 
   useEffect(() => {
+    // ask for location
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return;
@@ -39,6 +43,34 @@ const Home = () => {
         longitude: loc.coords.longitude,
       }));
     })();
+  }, []);
+
+  // 🔐 Read username from Firebase Auth
+  useEffect(() => {
+    // set immediately if user already available
+    const current = authService.getCurrentUser?.();
+    if (current) {
+      const name =
+        current.displayName ||
+        (current.email ? current.email.split('@')[0] : null) ||
+        'User';
+      setUsername(name);
+    }
+
+    // listen for changes
+    const unsubscribe = authService.onAuthStateChanged?.(user => {
+      if (user) {
+        const name =
+          user.displayName ||
+          (user.email ? user.email.split('@')[0] : null) ||
+          'User';
+        setUsername(name);
+      } else {
+        setUsername('User');
+      }
+    });
+
+    return typeof unsubscribe === 'function' ? unsubscribe : undefined;
   }, []);
 
   const openCreateLoop = () => setShowCreateLoop(true);
